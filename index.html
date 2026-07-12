@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#F2F4F3">
+<title>Live-Übersetzer · Russisch → Deutsch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=PT+Serif:ital@0;1&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F2F4F3;
+    --ink:#1A1D1C;
+    --muted:#6B7472;
+    --line:#DDE2E0;
+    --rec:#C2362B;
+    --rec-soft:rgba(194,54,43,.12);
+    --card:#FFFFFF;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:"IBM Plex Sans",system-ui,sans-serif;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+
+  /* ---------- Header ---------- */
+  header{
+    padding:calc(env(safe-area-inset-top) + 14px) 20px 12px;
+    border-bottom:1px solid var(--line);
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    background:var(--paper);
+  }
+  .brand .eyebrow{
+    font-family:"IBM Plex Mono",monospace;
+    font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);
+  }
+  .brand h1{
+    font-size:17px;font-weight:600;letter-spacing:-.01em;margin-top:2px;
+  }
+  .status{
+    display:flex;align-items:center;gap:7px;
+    font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--muted);
+    white-space:nowrap;
+  }
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--muted);flex:none}
+  body.live .dot{background:var(--rec);animation:pulse 1.4s ease-in-out infinite}
+  body.live .status{color:var(--rec)}
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.8)}}
+
+  /* ---------- Feed ---------- */
+  main{flex:1;overflow-y:auto;padding:16px 16px 12px;display:flex;flex-direction:column;gap:10px}
+  .empty{
+    margin:auto;text-align:center;color:var(--muted);max-width:280px;
+    display:flex;flex-direction:column;gap:10px;padding-bottom:40px;
+  }
+  .empty .big{font-family:"PT Serif",Georgia,serif;font-size:20px;color:var(--ink)}
+  .empty .hint{font-size:13px;line-height:1.5}
+
+  .card{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:12px 14px;
+    animation:enter .25s ease-out;
+  }
+  @keyframes enter{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .card .ru{
+    font-family:"PT Serif",Georgia,serif;
+    font-size:14px;color:var(--muted);line-height:1.45;
+  }
+  .card .de{
+    font-size:18px;font-weight:500;line-height:1.4;margin-top:6px;
+  }
+  .card .de.pending{color:var(--muted);font-weight:400;font-style:italic}
+  .card .meta{
+    font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--muted);
+    margin-top:8px;display:flex;justify-content:space-between;
+  }
+
+  /* live interim line */
+  .interim{
+    display:none;align-items:flex-start;gap:8px;
+    padding:4px 14px 8px;
+    font-family:"PT Serif",Georgia,serif;font-style:italic;
+    font-size:15px;color:var(--muted);line-height:1.45;
+  }
+  .interim .dot{margin-top:6px;background:var(--rec);animation:pulse 1.4s ease-in-out infinite}
+  body.live .interim.has-text{display:flex}
+
+  /* ---------- Fehler / Hinweis ---------- */
+  .notice{
+    display:none;margin:0 16px;padding:10px 14px;border-radius:12px;
+    background:var(--rec-soft);color:var(--rec);font-size:13px;line-height:1.45;
+  }
+  .notice.show{display:block}
+
+  /* ---------- Bottom Bar ---------- */
+  footer{
+    padding:12px 20px calc(env(safe-area-inset-bottom) + 14px);
+    border-top:1px solid var(--line);
+    display:grid;grid-template-columns:56px 1fr 56px;align-items:center;gap:12px;
+    background:var(--paper);
+  }
+  .icon-btn{
+    width:48px;height:48px;border:none;border-radius:50%;
+    background:transparent;color:var(--muted);
+    display:flex;align-items:center;justify-content:center;cursor:pointer;
+  }
+  .icon-btn:active{background:var(--line)}
+  #micBtn{
+    justify-self:center;
+    width:76px;height:76px;border-radius:50%;border:none;cursor:pointer;
+    background:var(--ink);color:#fff;
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 6px 18px rgba(26,29,28,.25);
+    transition:background .2s, box-shadow .2s;
+  }
+  #micBtn:active{transform:scale(.97)}
+  body.live #micBtn{
+    background:var(--rec);
+    box-shadow:0 0 0 8px var(--rec-soft), 0 6px 18px rgba(194,54,43,.3);
+  }
+  #micBtn svg{width:30px;height:30px}
+  .btn-label{
+    grid-column:2;justify-self:center;margin-top:-6px;
+    font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--muted);
+  }
+
+  /* Toast */
+  .toast{
+    position:fixed;left:50%;bottom:130px;transform:translateX(-50%) translateY(10px);
+    background:var(--ink);color:#fff;font-size:13px;
+    padding:8px 16px;border-radius:99px;opacity:0;pointer-events:none;
+    transition:opacity .2s, transform .2s;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  button:focus-visible{outline:3px solid var(--rec);outline-offset:2px}
+  @media (prefers-reduced-motion: reduce){
+    *{animation:none !important;transition:none !important}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="eyebrow">Живой перевод</div>
+    <h1>Russisch → Deutsch</h1>
+  </div>
+  <div class="status"><span class="dot"></span><span id="statusText">Bereit</span></div>
+</header>
+
+<div class="notice" id="notice"></div>
+
+<main id="feed">
+  <div class="empty" id="empty">
+    <div class="big">Слушаю… noch nicht.</div>
+    <div class="hint">Tippe auf das Mikrofon. Gesprochenes Russisch erscheint hier sofort als deutscher Text.<br><br>Braucht Internet · am besten Chrome · Mikrofon erlauben.</div>
+  </div>
+  <div class="interim" id="interim"><span class="dot"></span><span id="interimText"></span></div>
+</main>
+
+<footer>
+  <div></div>
+  <button id="micBtn" aria-label="Zuhören starten">
+    <svg id="micIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
+      <path d="M19 10v1a7 7 0 0 1-14 0v-1"/>
+      <line x1="12" y1="18" x2="12" y2="22"/>
+    </svg>
+  </button>
+  <button class="icon-btn" id="clearBtn" aria-label="Verlauf löschen">
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+    </svg>
+  </button>
+  <div class="btn-label" id="btnLabel">Zuhören</div>
+</footer>
+
+<div class="toast" id="toast">Kopiert</div>
+
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const feed = $('feed'), empty = $('empty'), interimEl = $('interim'),
+        interimText = $('interimText'), statusText = $('statusText'),
+        micBtn = $('micBtn'), btnLabel = $('btnLabel'), notice = $('notice'),
+        toast = $('toast'), clearBtn = $('clearBtn');
+
+  let active = false, rec = null, wakeLock = null;
+  let lastFinal = '', lastFinalTime = 0;
+
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  function showNotice(msg){ notice.textContent = msg; notice.classList.add('show'); }
+  function hideNotice(){ notice.classList.remove('show'); }
+
+  if(!SR){
+    showNotice('Dieser Browser unterstützt keine Spracherkennung. Bitte die Datei in Chrome (Android) öffnen.');
+    micBtn.disabled = true;
+  }
+
+  /* ---------- Übersetzung ---------- */
+  async function translate(text){
+    // 1) Claude (funktioniert im Artifact-Fenster)
+    try{
+      const r = await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          model:'claude-sonnet-4-6',
+          max_tokens:1000,
+          messages:[{role:'user',content:'Übersetze den folgenden russischen Text ins Deutsche. Antworte NUR mit der deutschen Übersetzung, ohne Anführungszeichen, ohne Erklärung:\n\n'+text}]
+        })
+      });
+      if(r.ok){
+        const d = await r.json();
+        const t = (d.content||[]).filter(c=>c.type==='text').map(c=>c.text).join('').trim();
+        if(t) return t;
+      }
+      throw new Error('api');
+    }catch(e){
+      // 2) Fallback: MyMemory (kostenlos, ohne Key – z. B. wenn Datei direkt in Chrome läuft)
+      try{
+        const r = await fetch('https://api.mymemory.translated.net/get?q='+encodeURIComponent(text.slice(0,480))+'&langpair=ru|de');
+        const d = await r.json();
+        const t = d && d.responseData && d.responseData.translatedText;
+        if(t) return t;
+      }catch(e2){}
+      return '⚠ Übersetzung fehlgeschlagen (Internet prüfen)';
+    }
+  }
+
+  /* ---------- Feed ---------- */
+  function timeNow(){
+    const d = new Date();
+    return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+  }
+
+  function addCard(ruText){
+    empty.style.display = 'none';
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = '<div class="ru"></div><div class="de pending">Übersetze…</div><div class="meta"><span></span><span>zum Kopieren tippen</span></div>';
+    card.querySelector('.ru').textContent = ruText;
+    card.querySelector('.meta span').textContent = timeNow();
+    feed.insertBefore(card, interimEl);
+    scrollDown();
+
+    const deEl = card.querySelector('.de');
+    translate(ruText).then(t=>{
+      deEl.textContent = t;
+      deEl.classList.remove('pending');
+      scrollDown();
+    });
+
+    card.addEventListener('click', ()=>{
+      const txt = deEl.classList.contains('pending') ? ruText : deEl.textContent;
+      if(navigator.clipboard){
+        navigator.clipboard.writeText(txt).then(()=>{
+          toast.classList.add('show');
+          setTimeout(()=>toast.classList.remove('show'), 1200);
+        });
+      }
+    });
+  }
+
+  function scrollDown(){ feed.scrollTop = feed.scrollHeight; }
+
+  /* ---------- Spracherkennung ---------- */
+  function buildRec(){
+    const r = new SR();
+    r.lang = 'ru-RU';
+    r.continuous = true;
+    r.interimResults = true;
+
+    r.onresult = (e)=>{
+      let interim = '';
+      for(let i = e.resultIndex; i < e.results.length; i++){
+        const res = e.results[i];
+        const txt = res[0].transcript.trim();
+        if(res.isFinal && txt){
+          // doppelte Finals nach Auto-Restart abfangen
+          const now = Date.now();
+          if(txt === lastFinal && now - lastFinalTime < 3000) continue;
+          lastFinal = txt; lastFinalTime = now;
+          addCard(txt);
+        }else{
+          interim += res[0].transcript;
+        }
+      }
+      interimText.textContent = interim;
+      interimEl.classList.toggle('has-text', interim.trim().length > 0);
+      if(interim) scrollDown();
+    };
+
+    r.onerror = (e)=>{
+      if(e.error === 'not-allowed' || e.error === 'service-not-allowed'){
+        active = false;
+        updateUI();
+        showNotice('Mikrofon blockiert. Falls das im Claude-Vorschaufenster passiert: Datei herunterladen und direkt in Chrome öffnen, dann Mikrofon erlauben.');
+      }
+      // 'no-speech' und 'aborted' ignorieren – Auto-Restart übernimmt
+    };
+
+    r.onend = ()=>{
+      interimEl.classList.remove('has-text');
+      if(active){
+        try{ r.start(); }catch(err){}
+      }else{
+        updateUI();
+      }
+    };
+    return r;
+  }
+
+  async function start(){
+    hideNotice();
+    active = true;
+    rec = buildRec();
+    try{
+      rec.start();
+    }catch(e){
+      active = false; updateUI(); return;
+    }
+    updateUI();
+    try{ if('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); }catch(e){}
+  }
+
+  function stop(){
+    active = false;
+    if(rec){ try{ rec.stop(); }catch(e){} }
+    if(wakeLock){ wakeLock.release().catch(()=>{}); wakeLock = null; }
+    updateUI();
+  }
+
+  function updateUI(){
+    document.body.classList.toggle('live', active);
+    statusText.textContent = active ? 'Höre zu…' : 'Bereit';
+    btnLabel.textContent = active ? 'Stopp' : 'Zuhören';
+    micBtn.setAttribute('aria-label', active ? 'Zuhören stoppen' : 'Zuhören starten');
+  }
+
+  micBtn.addEventListener('click', ()=> active ? stop() : start());
+
+  clearBtn.addEventListener('click', ()=>{
+    feed.querySelectorAll('.card').forEach(c=>c.remove());
+    empty.style.display = '';
+  });
+
+  document.addEventListener('visibilitychange', async ()=>{
+    if(document.visibilityState === 'visible' && active && !wakeLock){
+      try{ if('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); }catch(e){}
+    }
+  });
+})();
+</script>
+</body>
+</html>
