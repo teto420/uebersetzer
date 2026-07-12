@@ -74,9 +74,9 @@
     font-size:14px;color:var(--muted);line-height:1.45;
   }
   .card .de{
-    font-size:18px;font-weight:500;line-height:1.4;margin-top:6px;
+    font-size:18px;font-weight:500;line-height:1.45;margin-top:6px;
+    min-height:1em;
   }
-  .card .de.pending{color:var(--muted);font-weight:400;font-style:italic}
   .card .meta{
     font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--muted);
     margin-top:8px;display:flex;justify-content:space-between;
@@ -98,6 +98,18 @@
     background:var(--rec-soft);color:var(--rec);font-size:13px;line-height:1.45;
   }
   .notice.show{display:block}
+
+  /* ---------- Sprung nach unten ---------- */
+  .jump{
+    position:fixed;left:50%;transform:translateX(-50%);
+    bottom:calc(env(safe-area-inset-bottom) + 130px);
+    background:var(--ink);color:#fff;border:none;border-radius:99px;
+    padding:10px 18px;font-family:"IBM Plex Sans",system-ui,sans-serif;
+    font-size:13px;font-weight:500;cursor:pointer;
+    box-shadow:0 4px 14px rgba(26,29,28,.3);
+    display:none;align-items:center;gap:6px;
+  }
+  .jump.show{display:flex}
 
   /* ---------- Bottom Bar ---------- */
   footer{
@@ -150,7 +162,7 @@
 
 <header>
   <div class="brand">
-    <div class="eyebrow">Живой перевод</div>
+    <div class="eyebrow">Живой перевод · v2</div>
     <h1>Russisch → Deutsch</h1>
   </div>
   <div class="status"><span class="dot"></span><span id="statusText">Bereit</span></div>
@@ -161,15 +173,17 @@
 <main id="feed">
   <div class="empty" id="empty">
     <div class="big">Слушаю… noch nicht.</div>
-    <div class="hint">Tippe auf das Mikrofon. Gesprochenes Russisch erscheint hier sofort als deutscher Text.<br><br>Braucht Internet · am besten Chrome · Mikrofon erlauben.</div>
+    <div class="hint">Tippe auf das Mikrofon. Gesprochenes Russisch erscheint hier sofort als deutscher Text.<br><br>Zum Mitlesen einfach hochscrollen – neue Übersetzungen laufen unten weiter.</div>
   </div>
   <div class="interim" id="interim"><span class="dot"></span><span id="interimText"></span></div>
 </main>
 
+<button class="jump" id="jumpBtn">↓ Neue Übersetzung</button>
+
 <footer>
   <div></div>
   <button id="micBtn" aria-label="Zuhören starten">
-    <svg id="micIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
       <path d="M19 10v1a7 7 0 0 1-14 0v-1"/>
       <line x1="12" y1="18" x2="12" y2="22"/>
@@ -191,10 +205,17 @@
   const feed = $('feed'), empty = $('empty'), interimEl = $('interim'),
         interimText = $('interimText'), statusText = $('statusText'),
         micBtn = $('micBtn'), btnLabel = $('btnLabel'), notice = $('notice'),
-        toast = $('toast'), clearBtn = $('clearBtn');
+        toast = $('toast'), clearBtn = $('clearBtn'), jumpBtn = $('jumpBtn');
+
+  // Neue Karte erst nach so viel Pause (ms) – vorher wird angehängt:
+  const MERGE_WINDOW = 10000;
+  // ...oder wenn eine Karte zu lang wird:
+  const MAX_CHARS = 600;
 
   let active = false, rec = null, wakeLock = null;
   let lastFinal = '', lastFinalTime = 0;
+  let currentCard = null, lastAppendTime = 0;
+  let stickToBottom = true;
 
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -202,7 +223,7 @@
   function hideNotice(){ notice.classList.remove('show'); }
 
   if(!SR){
-    showNotice('Dieser Browser unterstützt keine Spracherkennung. Bitte die Datei in Chrome (Android) öffnen.');
+    showNotice('Dieser Browser unterstützt keine Spracherkennung. Bitte die Seite in Chrome (Android) öffnen.');
     micBtn.disabled = true;
   }
 
@@ -226,7 +247,7 @@
       }
       throw new Error('api');
     }catch(e){
-      // 2) Fallback: MyMemory (kostenlos, ohne Key – z. B. wenn Datei direkt in Chrome läuft)
+      // 2) Fallback: MyMemory (kostenlos, ohne Key)
       try{
         const r = await fetch('https://api.mymemory.translated.net/get?q='+encodeURIComponent(text.slice(0,480))+'&langpair=ru|de');
         const d = await r.json();
@@ -237,41 +258,77 @@
     }
   }
 
+  /* ---------- Scroll-Verhalten ---------- */
+  feed.addEventListener('scroll', ()=>{
+    const nearBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 80;
+    stickToBottom = nearBottom;
+    if(nearBottom) jumpBtn.classList.remove('show');
+  });
+
+  function notifyNew(){
+    if(stickToBottom){
+      feed.scrollTop = feed.scrollHeight;
+    }else{
+      jumpBtn.classList.add('show');
+    }
+  }
+
+  jumpBtn.addEventListener('click', ()=>{
+    stickToBottom = true;
+    jumpBtn.classList.remove('show');
+    feed.scrollTop = feed.scrollHeight;
+  });
+
   /* ---------- Feed ---------- */
   function timeNow(){
     const d = new Date();
     return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
   }
 
-  function addCard(ruText){
+  function startNewCard(){
     empty.style.display = 'none';
     const card = document.createElement('div');
     card.className = 'card';
-    card.innerHTML = '<div class="ru"></div><div class="de pending">Übersetze…</div><div class="meta"><span></span><span>zum Kopieren tippen</span></div>';
-    card.querySelector('.ru').textContent = ruText;
+    card.innerHTML = '<div class="ru"></div><div class="de"></div><div class="meta"><span></span><span>zum Kopieren tippen</span></div>';
     card.querySelector('.meta span').textContent = timeNow();
-    feed.insertBefore(card, interimEl);
-    scrollDown();
-
-    const deEl = card.querySelector('.de');
-    translate(ruText).then(t=>{
-      deEl.textContent = t;
-      deEl.classList.remove('pending');
-      scrollDown();
-    });
-
+    card._chain = Promise.resolve();
     card.addEventListener('click', ()=>{
-      const txt = deEl.classList.contains('pending') ? ruText : deEl.textContent;
-      if(navigator.clipboard){
+      const de = card.querySelector('.de').textContent.trim();
+      const ru = card.querySelector('.ru').textContent.trim();
+      const txt = de || ru;
+      if(txt && navigator.clipboard){
         navigator.clipboard.writeText(txt).then(()=>{
           toast.classList.add('show');
           setTimeout(()=>toast.classList.remove('show'), 1200);
         });
       }
     });
+    feed.insertBefore(card, interimEl);
+    currentCard = card;
   }
 
-  function scrollDown(){ feed.scrollTop = feed.scrollHeight; }
+  function addFinal(ruText){
+    const now = Date.now();
+    const tooOld = now - lastAppendTime > MERGE_WINDOW;
+    const tooLong = currentCard && currentCard.querySelector('.ru').textContent.length > MAX_CHARS;
+    if(!currentCard || tooOld || tooLong) startNewCard();
+    lastAppendTime = now;
+
+    const card = currentCard;
+    const ruEl = card.querySelector('.ru');
+    const deEl = card.querySelector('.de');
+
+    ruEl.textContent = (ruEl.textContent ? ruEl.textContent + ' ' : '') + ruText;
+    notifyNew();
+
+    // Übersetzungen in Reihenfolge anhängen (Text wächst nur, springt nicht)
+    card._chain = card._chain
+      .then(()=>translate(ruText))
+      .then(t=>{
+        deEl.textContent = (deEl.textContent ? deEl.textContent + ' ' : '') + t;
+        notifyNew();
+      });
+  }
 
   /* ---------- Spracherkennung ---------- */
   function buildRec(){
@@ -286,25 +343,24 @@
         const res = e.results[i];
         const txt = res[0].transcript.trim();
         if(res.isFinal && txt){
-          // doppelte Finals nach Auto-Restart abfangen
           const now = Date.now();
           if(txt === lastFinal && now - lastFinalTime < 3000) continue;
           lastFinal = txt; lastFinalTime = now;
-          addCard(txt);
+          addFinal(txt);
         }else{
           interim += res[0].transcript;
         }
       }
       interimText.textContent = interim;
       interimEl.classList.toggle('has-text', interim.trim().length > 0);
-      if(interim) scrollDown();
+      if(interim && stickToBottom) feed.scrollTop = feed.scrollHeight;
     };
 
     r.onerror = (e)=>{
       if(e.error === 'not-allowed' || e.error === 'service-not-allowed'){
         active = false;
         updateUI();
-        showNotice('Mikrofon blockiert. Falls das im Claude-Vorschaufenster passiert: Datei herunterladen und direkt in Chrome öffnen, dann Mikrofon erlauben.');
+        showNotice('Mikrofon blockiert. Bitte in Chrome öffnen und den Mikrofonzugriff erlauben (Schloss-Symbol in der Adresszeile → Berechtigungen).');
       }
       // 'no-speech' und 'aborted' ignorieren – Auto-Restart übernimmt
     };
@@ -323,6 +379,8 @@
   async function start(){
     hideNotice();
     active = true;
+    currentCard = null;          // nach jedem Start frischer Block
+    lastAppendTime = 0;
     rec = buildRec();
     try{
       rec.start();
@@ -335,6 +393,7 @@
 
   function stop(){
     active = false;
+    currentCard = null;
     if(rec){ try{ rec.stop(); }catch(e){} }
     if(wakeLock){ wakeLock.release().catch(()=>{}); wakeLock = null; }
     updateUI();
@@ -351,6 +410,9 @@
 
   clearBtn.addEventListener('click', ()=>{
     feed.querySelectorAll('.card').forEach(c=>c.remove());
+    currentCard = null;
+    jumpBtn.classList.remove('show');
+    stickToBottom = true;
     empty.style.display = '';
   });
 
